@@ -6345,6 +6345,10 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
                 type = getReducedType(type);
             }
 
+            if (isQueryTypeParameter(type) && type.constraint!.flags & TypeFlags.Any) {
+                type = type.constraint!;
+            }
+
             if (type.flags & TypeFlags.Any) {
                 if (type.aliasSymbol) {
                     return factory.createTypeReferenceNode(symbolToEntityNameNode(type.aliasSymbol), mapToTypeNodes(type.aliasTypeArguments, context));
@@ -6951,7 +6955,11 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
                         while (i < length) {
                             // Find group of type arguments for type parameters with the same declaring container.
                             const start = i;
-                            const parent = getParentSymbolOfTypeParameter(outerTypeParameters[i])!;
+                            const parent = getParentSymbolOfTypeParameter(outerTypeParameters[i]);
+                            if (!parent) {
+                                i++;
+                                continue;
+                            }
                             do {
                                 i++;
                             } while (i < length && getParentSymbolOfTypeParameter(outerTypeParameters[i]) === parent);
@@ -13716,6 +13724,7 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
     }
 
     function getBaseConstraintOfType(type: Type): Type | undefined {
+        type = getOkType(type);
         if (type.flags & (TypeFlags.InstantiableNonPrimitive | TypeFlags.UnionOrIntersection | TypeFlags.TemplateLiteral | TypeFlags.StringMapping)) {
             const constraint = getResolvedBaseConstraint(type as InstantiableType | UnionOrIntersectionType);
             return constraint !== noConstraintType && constraint !== circularConstraintType ? constraint : undefined;
@@ -15124,8 +15133,8 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
     }
 
     function getParentSymbolOfTypeParameter(typeParameter: TypeParameter): Symbol | undefined {
-        const tp = getDeclarationOfKind<TypeParameterDeclaration>(typeParameter.symbol, SyntaxKind.TypeParameter)!;
-        const host = isJSDocTemplateTag(tp.parent) ? getEffectiveContainerForJSDocTemplateTag(tp.parent) : tp.parent;
+        const tp = typeParameter.symbol && getDeclarationOfKind<TypeParameterDeclaration>(typeParameter.symbol, SyntaxKind.TypeParameter);
+        const host = tp && (isJSDocTemplateTag(tp.parent) ? getEffectiveContainerForJSDocTemplateTag(tp.parent) : tp.parent);
         return host && getSymbolOfNode(host);
     }
 
@@ -15673,14 +15682,19 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
             // tp.constraint = resolvedType;
             // tp.exprName = node.exprName;
             // links.resolvedType = tp;
-            getTypeParameterFromTypeQueryNode(node);
+            links.resolvedType = getTypeParameterFromTypeQueryNode(node); // >> TODO: this is just to make the type checker happy
         }
         if (!(links.resolvedType as QueryTypeParameter).constraint) {
             const type = checkExpressionWithTypeArguments(node);
             const resolvedType = getRegularTypeOfLiteralType(getWidenedType(type));
             (links.resolvedType as QueryTypeParameter).constraint = resolvedType;
+            // if (resolvedType.flags & TypeFlags.Any) {
+            //     // >> Propagate `any`ness?
+            //     links.resolvedType.flags |= TypeFlags.Any;
+            // }
         }
-        return links.resolvedType!;
+        // return links.resolvedType!;
+        return links.resolvedType;
     }
 
     function getTypeParameterFromTypeQueryNode(node: TypeQueryNode): QueryTypeParameter {
@@ -19030,6 +19044,71 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
         return type;
     }
 
+    function collectQueryTypeParametersFromType(type: Type): readonly QueryTypeParameter[] | undefined {
+        type = getReducedType(type);
+        // type = getNormalizedType(type, /*writing*/ false);
+        const flags = type.flags;
+        // T
+        if (flags & TypeFlags.TypeParameter) {
+            if (isQueryTypeParameter(type)) {
+                return [type];
+            }
+            // >> We're skipping collecting the query type parameters from constraints here.
+            return undefined;
+        }
+        // T | S
+        // T & S
+        if (flags & TypeFlags.UnionOrIntersection) {
+            return flatMap((type as UnionOrIntersectionType).types, collectQueryTypeParametersFromType);
+        }
+        // keyof T
+        if (flags & TypeFlags.Index) {
+            return collectQueryTypeParametersFromType((type as IndexType).type);
+        }
+        // T[S]
+        if (flags & TypeFlags.IndexedAccess) {
+            return concatenate(
+                collectQueryTypeParametersFromType((type as IndexedAccessType).objectType),
+                collectQueryTypeParametersFromType((type as IndexedAccessType).indexType));
+        }
+        // T extends S ? U : V
+        if (flags & TypeFlags.Conditional) {
+            return concatenate(
+                collectQueryTypeParametersFromType((type as ConditionalType).checkType),
+                concatenate(
+                    collectQueryTypeParametersFromType((type as ConditionalType).extendsType),
+                    concatenate(
+                        collectQueryTypeParametersFromType(getTrueTypeFromConditionalType((type as ConditionalType))),
+                        collectQueryTypeParametersFromType(getFalseTypeFromConditionalType((type as ConditionalType)))
+                    )
+                )
+            );
+        }
+        // { ... }
+        if (flags & TypeFlags.Object) {
+            // >> What do I do here??
+            // const resolvedType = resolveStructuredTypeMembers((type as ObjectType));
+            // >> TODO: do this
+            // >> We could do it like `getObjectTypeInstantiation` does,
+            // >> where it gets type parameters from the object type's declaration, but
+            // >> not sure if this would be enough.
+        }
+        return undefined;
+    }
+
+    function getOkType(type: Type): Type {
+        return instantiateQueryTypesWithConstraint(type);
+    }
+
+    function instantiateQueryTypesWithConstraint(type: Type): Type {
+        const queryTypeParameters = collectQueryTypeParametersFromType(type);
+        if (!queryTypeParameters) {
+            return type;
+        }
+        const mapper = createTypeMapper(queryTypeParameters, queryTypeParameters.map(tp => tp.constraint!));
+        return instantiateType(type, mapper);
+    }
+
     function instantiateType(type: Type, mapper: TypeMapper | undefined): Type;
     function instantiateType(type: Type | undefined, mapper: TypeMapper | undefined): Type | undefined;
     function instantiateType(type: Type | undefined, mapper: TypeMapper | undefined): Type | undefined {
@@ -20238,6 +20317,13 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
         return getObjectFlags(source) & ObjectFlags.JsxAttributes && isHyphenatedJsxName(sourceProp.escapedName);
     }
 
+    /**
+     * Returns a normalized type. Turn fresh literal types into regular literal types,
+     * normalizes tuple types, normalizes union and intersection types,
+     * turn deferred type references into regular type references, simplify indexed access and
+     * conditional types, and resolve substitution types to either the substitution (on the source
+     * side) or the type variable (on the target side).
+     */
     function getNormalizedType(type: Type, writing: boolean): Type {
         while (true) {
             const t = isFreshLiteralType(type) ? (type as FreshableType).regularType :
@@ -20635,7 +20721,7 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
          * * Ternary.False if they are not related.
          */
         function isRelatedTo(originalSource: Type, originalTarget: Type, recursionFlags: RecursionFlags = RecursionFlags.Both, reportErrors = false, headMessage?: DiagnosticMessage, intersectionState = IntersectionState.None): Ternary {
-            // Before normalization: if `source` is type an object type, and `target` is primitive,
+            // Before normalization: if `source` is an object type, and `target` is primitive,
             // skip all the checks we don't need and just return `isSimpleTypeRelatedTo` result
             if (originalSource.flags & TypeFlags.Object && originalTarget.flags & TypeFlags.Primitive) {
                 if (relation === comparableRelation && !(originalTarget.flags & TypeFlags.Never) && isSimpleTypeRelatedTo(originalTarget, originalSource, relation) ||
@@ -20654,6 +20740,7 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
             // side) or the type variable (on the target side).
             const source = getNormalizedType(originalSource, /*writing*/ false);
             let target = getNormalizedType(originalTarget, /*writing*/ true);
+            // >> TODO: do it here
 
             if (source === target) return Ternary.True;
 
