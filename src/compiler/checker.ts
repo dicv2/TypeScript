@@ -13724,7 +13724,8 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
     }
 
     function getBaseConstraintOfType(type: Type): Type | undefined {
-        type = getOkType(type);
+        // type = getOkType(type);
+        getOkType(type);
         if (type.flags & (TypeFlags.InstantiableNonPrimitive | TypeFlags.UnionOrIntersection | TypeFlags.TemplateLiteral | TypeFlags.StringMapping)) {
             const constraint = getResolvedBaseConstraint(type as InstantiableType | UnionOrIntersectionType);
             return constraint !== noConstraintType && constraint !== circularConstraintType ? constraint : undefined;
@@ -19045,7 +19046,7 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
     }
 
     function collectQueryTypeParametersFromType(type: Type): readonly QueryTypeParameter[] | undefined {
-        type = getReducedType(type);
+        // type = getReducedType(type); >> TODO: do we need this?
         // type = getNormalizedType(type, /*writing*/ false);
         const flags = type.flags;
         // T
@@ -19115,7 +19116,7 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
         return type && mapper ? instantiateTypeWithAlias(type, mapper, /*aliasSymbol*/ undefined, /*aliasTypeArguments*/ undefined) : type;
     }
 
-    function instantiateTypeWithAlias(type: Type, mapper: TypeMapper, aliasSymbol: Symbol | undefined, aliasTypeArguments: readonly Type[] | undefined): Type {
+    function instantiateTypeWithAlias(type: Type, mapper: TypeMapper, aliasSymbol: Symbol | undefined, aliasTypeArguments: readonly Type[] | undefined, writing?: boolean): Type {
         if (!couldContainTypeVariables(type)) {
             return type;
         }
@@ -19130,12 +19131,12 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
         totalInstantiationCount++;
         instantiationCount++;
         instantiationDepth++;
-        const result = instantiateTypeWorker(type, mapper, aliasSymbol, aliasTypeArguments);
+        const result = instantiateTypeWorker(type, mapper, aliasSymbol, aliasTypeArguments, writing);
         instantiationDepth--;
         return result;
     }
 
-    function instantiateTypeWorker(type: Type, mapper: TypeMapper, aliasSymbol: Symbol | undefined, aliasTypeArguments: readonly Type[] | undefined): Type {
+    function instantiateTypeWorker(type: Type, mapper: TypeMapper, aliasSymbol: Symbol | undefined, aliasTypeArguments: readonly Type[] | undefined, writing: boolean | undefined): Type {
         const flags = type.flags;
         if (flags & TypeFlags.TypeParameter) {
             return getMappedType(type, mapper);
@@ -19180,7 +19181,8 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
         if (flags & TypeFlags.IndexedAccess) {
             const newAliasSymbol = aliasSymbol || type.aliasSymbol;
             const newAliasTypeArguments = aliasSymbol ? aliasTypeArguments : instantiateTypes(type.aliasTypeArguments, mapper);
-            return getIndexedAccessType(instantiateType((type as IndexedAccessType).objectType, mapper), instantiateType((type as IndexedAccessType).indexType, mapper), (type as IndexedAccessType).accessFlags, /*accessNode*/ undefined, newAliasSymbol, newAliasTypeArguments);
+            const accessFlags = writing ? (type as IndexedAccessType).accessFlags | AccessFlags.Writing : (type as IndexedAccessType).accessFlags;
+            return getIndexedAccessType(instantiateType((type as IndexedAccessType).objectType, mapper), instantiateType((type as IndexedAccessType).indexType, mapper), accessFlags, /*accessNode*/ undefined, newAliasSymbol, newAliasTypeArguments);
         }
         if (flags & TypeFlags.Conditional) {
             return getConditionalTypeInstantiation(type as ConditionalType, combineTypeMappers((type as ConditionalType).mapper, mapper), aliasSymbol, aliasTypeArguments);
@@ -42400,11 +42402,21 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
                         const fakeName = factory.cloneNode(originalName);
                         setParent(fakeName, node.parent);
                         setNodeFlags(fakeName, fakeName.flags | NodeFlags.Synthesized);
-                        fakeName.flowNode = (node.flowNode as FlowAssignment | undefined)?.antecedent;
                         fakeName.flowNode = node.flowNode;
-                        return checkExpression(fakeName);
+                        // return checkExpression(fakeName);
+                        const exprType = checkExpression(fakeName);
+                        const newTypeParam = createTypeParameter() as QueryTypeParameter;
+                        newTypeParam.exprName = tp.exprName;
+                        newTypeParam.flags = tp.flags;
+                        newTypeParam.constraint = exprType;
+                        return newTypeParam;
                     }));
-                    const actualReturnType = instantiateType(unwrappedReturnType, mapper);
+                    const actualReturnType = instantiateTypeWithAlias(
+                        unwrappedReturnType,
+                        mapper,
+                        /*aliasSymbol*/ undefined,
+                        /*aliasTypeArguments*/ undefined,
+                        /*writing*/ true);
                     // checkTypeAssignableToAndOptionallyElaborate(unwrappedExprType, unwrappedReturnType, node, node.expression);
                     checkTypeAssignableToAndOptionallyElaborate(unwrappedExprType, actualReturnType, node, node.expression);
                 }
