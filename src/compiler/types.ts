@@ -221,7 +221,9 @@ export const enum SyntaxKind {
     GlobalKeyword,
     BigIntKeyword,
     OverrideKeyword,
-    OfKeyword, // LastKeyword and LastToken and LastContextualKeyword
+    OfKeyword,
+    NarrowKeyord,
+    // LastKeyword and LastToken and LastContextualKeyword
 
     // Parse tree nodes
 
@@ -268,6 +270,7 @@ export const enum SyntaxKind {
     NamedTupleMember,
     TemplateLiteralType,
     TemplateLiteralTypeSpan,
+    NarrowType,
     ImportType,
     // Binding patterns
     ObjectBindingPattern,
@@ -632,6 +635,7 @@ export type KeywordSyntaxKind =
     | SyntaxKind.LetKeyword
     | SyntaxKind.ModuleKeyword
     | SyntaxKind.NamespaceKeyword
+    | SyntaxKind.NarrowKeyord
     | SyntaxKind.NeverKeyword
     | SyntaxKind.NewKeyword
     | SyntaxKind.NullKeyword
@@ -731,6 +735,7 @@ export type TypeNodeSyntaxKind =
     | SyntaxKind.TemplateLiteralTypeSpan
     | SyntaxKind.ImportType
     | SyntaxKind.ExpressionWithTypeArguments
+    | SyntaxKind.NarrowType
     | SyntaxKind.JSDocTypeExpression
     | SyntaxKind.JSDocAllType
     | SyntaxKind.JSDocUnknownType
@@ -1051,6 +1056,7 @@ export type HasChildren =
     | FunctionTypeNode
     | ConstructorTypeNode
     | TypeQueryNode
+    | NarrowTypeNode
     | TypeLiteralNode
     | ArrayTypeNode
     | TupleTypeNode
@@ -2230,6 +2236,11 @@ export interface TypePredicateNode extends TypeNode {
 export interface TypeQueryNode extends NodeWithTypeArguments {
     readonly kind: SyntaxKind.TypeQuery;
     readonly exprName: EntityName;
+}
+
+export interface NarrowTypeNode extends TypeNode {
+    readonly kind: SyntaxKind.NarrowType;
+    readonly idName: Identifier;
 }
 
 // A TypeLiteral is the declaration node for an anonymous symbol.
@@ -8376,6 +8387,8 @@ export interface NodeFactory {
     updateConstructorTypeNode(node: ConstructorTypeNode, modifiers: readonly Modifier[] | undefined, typeParameters: NodeArray<TypeParameterDeclaration> | undefined, parameters: NodeArray<ParameterDeclaration>, type: TypeNode): ConstructorTypeNode;
     createTypeQueryNode(exprName: EntityName, typeArguments?: readonly TypeNode[]): TypeQueryNode;
     updateTypeQueryNode(node: TypeQueryNode, exprName: EntityName, typeArguments?: readonly TypeNode[]): TypeQueryNode;
+    createNarrowTypeNode(idName: Identifier): NarrowTypeNode;
+    updateNarrowTypeNode(node: NarrowTypeNode, idName: Identifier): NarrowTypeNode;
     createTypeLiteralNode(members: readonly TypeElement[] | undefined): TypeLiteralNode;
     updateTypeLiteralNode(node: TypeLiteralNode, members: NodeArray<TypeElement>): TypeLiteralNode;
     createArrayTypeNode(elementType: TypeNode): ArrayTypeNode;

@@ -326,6 +326,7 @@ import {
     NamespaceExport,
     NamespaceExportDeclaration,
     NamespaceImport,
+    NarrowTypeNode,
     NewExpression,
     Node,
     NodeArray,
@@ -1897,6 +1898,8 @@ export function createPrinter(printerOptions: PrinterOptions = {}, handlers: Pri
                     return emitConstructorType(node as ConstructorTypeNode);
                 case SyntaxKind.TypeQuery:
                     return emitTypeQuery(node as TypeQueryNode);
+                case SyntaxKind.NarrowType:
+                    return emitNarrowType(node as NarrowTypeNode);
                 case SyntaxKind.TypeLiteral:
                     return emitTypeLiteral(node as TypeLiteralNode);
                 case SyntaxKind.ArrayType:
@@ -2764,6 +2767,12 @@ export function createPrinter(printerOptions: PrinterOptions = {}, handlers: Pri
         writeSpace();
         emit(node.exprName);
         emitTypeArguments(node, node.typeArguments);
+    }
+
+    function emitNarrowType(node: NarrowTypeNode) {
+        writeKeyword("narrow");
+        writeSpace();
+        emit(node.idName);
     }
 
     function emitTypeLiteral(node: TypeLiteralNode) {

@@ -1,86 +1,39 @@
 === tests/cases/compiler/dependentReturnType.ts ===
-interface F {
->F : Symbol(F, Decl(dependentReturnType.ts, 0, 0))
+interface A {
+>A : Symbol(A, Decl(dependentReturnType.ts, 0, 0))
 
-    "t": number,
->"t" : Symbol(F["t"], Decl(dependentReturnType.ts, 0, 13))
+    1: number;
+>1 : Symbol(A[1], Decl(dependentReturnType.ts, 0, 13))
 
-    "f": boolean,
->"f" : Symbol(F["f"], Decl(dependentReturnType.ts, 1, 16))
+    2: string;
+>2 : Symbol(A[2], Decl(dependentReturnType.ts, 1, 14))
 }
 
-function depLikeFun1<T extends keyof F>(str: T): F[typeof str] {
->depLikeFun1 : Symbol(depLikeFun1, Decl(dependentReturnType.ts, 3, 1))
->T : Symbol(T, Decl(dependentReturnType.ts, 5, 21))
->F : Symbol(F, Decl(dependentReturnType.ts, 0, 0))
->str : Symbol(str, Decl(dependentReturnType.ts, 5, 40))
->T : Symbol(T, Decl(dependentReturnType.ts, 5, 21))
->F : Symbol(F, Decl(dependentReturnType.ts, 0, 0))
->str : Symbol(str, Decl(dependentReturnType.ts, 5, 40))
+function foo(x: 1 | 2): A[narrow x] {
+>foo : Symbol(foo, Decl(dependentReturnType.ts, 3, 1))
+>x : Symbol(x, Decl(dependentReturnType.ts, 5, 13))
+>A : Symbol(A, Decl(dependentReturnType.ts, 0, 0))
 
-    if (str === "t") { // Can never return anything because `F[T]` is treated as `never` when checking return type assignb.
->str : Symbol(str, Decl(dependentReturnType.ts, 5, 40))
+    if (x === 1) {
+>x : Symbol(x, Decl(dependentReturnType.ts, 5, 13))
 
-        const y: "t" = str;
->y : Symbol(y, Decl(dependentReturnType.ts, 7, 13))
->str : Symbol(str, Decl(dependentReturnType.ts, 5, 40))
-
-        return 1;
-    } else {
-        return true;
+        return 0;
+    }
+    else {
+        return false;
     }
 }
 
-const x = depLikeFun1("t"); // has type number
->x : Symbol(x, Decl(dependentReturnType.ts, 14, 5))
->depLikeFun1 : Symbol(depLikeFun1, Decl(dependentReturnType.ts, 3, 1))
+const r: number = foo(1);
+>r : Symbol(r, Decl(dependentReturnType.ts, 14, 5))
+>foo : Symbol(foo, Decl(dependentReturnType.ts, 3, 1))
 
-const y = depLikeFun1("f"); // has type boolean
->y : Symbol(y, Decl(dependentReturnType.ts, 15, 5))
->depLikeFun1 : Symbol(depLikeFun1, Decl(dependentReturnType.ts, 3, 1))
+const r2: string = foo(2);
+>r2 : Symbol(r2, Decl(dependentReturnType.ts, 15, 5))
+>foo : Symbol(foo, Decl(dependentReturnType.ts, 3, 1))
 
-function depLikeFun2(str: "number" | "string"): typeof str extends "number" ? number : string {
->depLikeFun2 : Symbol(depLikeFun2, Decl(dependentReturnType.ts, 15, 27))
->str : Symbol(str, Decl(dependentReturnType.ts, 17, 21))
->str : Symbol(str, Decl(dependentReturnType.ts, 17, 21))
-
-    if (str === "number") {
->str : Symbol(str, Decl(dependentReturnType.ts, 17, 21))
-
-        return 3;
-    }
-
-    return "";
-}
-
-const zz = depLikeFun2(undefined as any as "number" | "string");
->zz : Symbol(zz, Decl(dependentReturnType.ts, 25, 5))
->depLikeFun2 : Symbol(depLikeFun2, Decl(dependentReturnType.ts, 15, 27))
+const r3 = foo(undefined as any as (1 | 2));
+>r3 : Symbol(r3, Decl(dependentReturnType.ts, 16, 5))
+>foo : Symbol(foo, Decl(dependentReturnType.ts, 3, 1))
 >undefined : Symbol(undefined)
 
-const zzz = depLikeFun2("number");
->zzz : Symbol(zzz, Decl(dependentReturnType.ts, 26, 5))
->depLikeFun2 : Symbol(depLikeFun2, Decl(dependentReturnType.ts, 15, 27))
-
-function depLikeFun3<T extends keyof F>(str: T): F[typeof str] {
->depLikeFun3 : Symbol(depLikeFun3, Decl(dependentReturnType.ts, 26, 34))
->T : Symbol(T, Decl(dependentReturnType.ts, 28, 21))
->F : Symbol(F, Decl(dependentReturnType.ts, 0, 0))
->str : Symbol(str, Decl(dependentReturnType.ts, 28, 40))
->T : Symbol(T, Decl(dependentReturnType.ts, 28, 21))
->F : Symbol(F, Decl(dependentReturnType.ts, 0, 0))
->str : Symbol(str, Decl(dependentReturnType.ts, 28, 40))
-
-    if (str === "t") {
->str : Symbol(str, Decl(dependentReturnType.ts, 28, 40))
-
-        const y: "t" = str;
->y : Symbol(y, Decl(dependentReturnType.ts, 30, 13))
->str : Symbol(str, Decl(dependentReturnType.ts, 28, 40))
-
-        return false;
-    } else {
-        return true;
-    }
-    return 0;
-}

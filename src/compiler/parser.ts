@@ -263,6 +263,7 @@ import {
     NamespaceExport,
     NamespaceExportDeclaration,
     NamespaceImport,
+    NarrowTypeNode,
     NewExpression,
     Node,
     NodeArray,
@@ -667,6 +668,9 @@ const forEachChildTable: ForEachChildTable = {
     [SyntaxKind.TypeQuery]: function forEachChildInTypeQuery<T>(node: TypeQueryNode, cbNode: (node: Node) => T | undefined, cbNodes?: (nodes: NodeArray<Node>) => T | undefined): T | undefined {
         return visitNode(cbNode, node.exprName) ||
             visitNodes(cbNode, cbNodes, node.typeArguments);
+    },
+    [SyntaxKind.NarrowType]: function forEachChildInNarrowType<T>(node: NarrowTypeNode, cbNode: (node: Node) => T | undefined, _cbNodes?: (nodes: NodeArray<Node>) => T | undefined): T | undefined {
+        return visitNode(cbNode, node.idName);
     },
     [SyntaxKind.TypeLiteral]: function forEachChildInTypeLiteral<T>(node: TypeLiteralNode, cbNode: (node: Node) => T | undefined, cbNodes?: (nodes: NodeArray<Node>) => T | undefined): T | undefined {
         return visitNodes(cbNode, cbNodes, node.members);
@@ -3846,6 +3850,13 @@ namespace Parser {
         return finishNode(factory.createTypeQueryNode(entityName, typeArguments), pos);
     }
 
+    function parseNarrowType(): NarrowTypeNode {
+        const pos = getNodePos();
+        parseExpected(SyntaxKind.NarrowKeyord);
+        const idName = parseIdentifier();
+        return finishNode(factory.createNarrowTypeNode(idName), pos);
+    }
+
     function parseTypeParameter(): TypeParameterDeclaration {
         const pos = getNodePos();
         const modifiers = parseModifiers(/*allowDecorators*/ false, /*permitConstAsModifier*/ true);
@@ -4532,6 +4543,8 @@ namespace Parser {
             }
             case SyntaxKind.TypeOfKeyword:
                 return lookAhead(isStartOfTypeOfImportType) ? parseImportType() : parseTypeQuery();
+            case SyntaxKind.NarrowKeyord:
+                return parseNarrowType();
             case SyntaxKind.OpenBraceToken:
                 return lookAhead(isStartOfMappedType) ? parseMappedType() : parseTypeLiteral();
             case SyntaxKind.OpenBracketToken:

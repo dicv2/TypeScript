@@ -324,6 +324,7 @@ import {
     NamespaceExport,
     NamespaceExportDeclaration,
     NamespaceImport,
+    NarrowTypeNode,
     NewExpression,
     Node,
     NodeArray,
@@ -594,6 +595,8 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         updateConstructorTypeNode,
         createTypeQueryNode,
         updateTypeQueryNode,
+        createNarrowTypeNode,
+        updateNarrowTypeNode,
         createTypeLiteralNode,
         updateTypeLiteralNode,
         createArrayTypeNode,
@@ -2296,6 +2299,18 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         return node.exprName !== exprName
             || node.typeArguments !== typeArguments
             ? update(createTypeQueryNode(exprName, typeArguments), node)
+            : node;
+    }
+
+    function createNarrowTypeNode(idName: Identifier) {
+        const node = createBaseNode<NarrowTypeNode>(SyntaxKind.NarrowType);
+        node.idName = idName;
+        return node;
+    }
+
+    function updateNarrowTypeNode(node: NarrowTypeNode, idName: Identifier) {
+        return node.idName !== idName
+            ? update(createNarrowTypeNode(idName), node)
             : node;
     }
 

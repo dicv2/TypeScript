@@ -1,100 +1,47 @@
 === tests/cases/compiler/dependentReturnType.ts ===
-interface F {
-    "t": number,
->"t" : number
+interface A {
+    1: number;
+>1 : number
 
-    "f": boolean,
->"f" : boolean
+    2: string;
+>2 : string
 }
 
-function depLikeFun1<T extends keyof F>(str: T): F[typeof str] {
->depLikeFun1 : <T extends keyof F>(str: T) => F[typeof str]
->str : T
->str : T
+function foo(x: 1 | 2): A[narrow x] {
+>foo : (x: 1 | 2) => A[narrow x]
+>x : 1 | 2
 
-    if (str === "t") { // Can never return anything because `F[T]` is treated as `never` when checking return type assignb.
->str === "t" : boolean
->str : T
->"t" : "t"
-
-        const y: "t" = str;
->y : "t"
->str : "t"
-
-        return 1;
+    if (x === 1) {
+>x === 1 : boolean
+>x : 1 | 2
 >1 : 1
 
-    } else {
-        return true;
->true : true
+        return 0;
+>0 : 0
+    }
+    else {
+        return false;
+>false : false
     }
 }
 
-const x = depLikeFun1("t"); // has type number
->x : F[typeof str]
->depLikeFun1("t") : F[typeof str]
->depLikeFun1 : <T extends keyof F>(str: T) => F[typeof str]
->"t" : "t"
+const r: number = foo(1);
+>r : number
+>foo(1) : number
+>foo : (x: 1 | 2) => A[narrow x]
+>1 : 1
 
-const y = depLikeFun1("f"); // has type boolean
->y : F[typeof str]
->depLikeFun1("f") : F[typeof str]
->depLikeFun1 : <T extends keyof F>(str: T) => F[typeof str]
->"f" : "f"
+const r2: string = foo(2);
+>r2 : string
+>foo(2) : string
+>foo : (x: 1 | 2) => A[narrow x]
+>2 : 2
 
-function depLikeFun2(str: "number" | "string"): typeof str extends "number" ? number : string {
->depLikeFun2 : (str: "number" | "string") => typeof str extends "number" ? number : string
->str : "string" | "number"
->str : "string" | "number"
-
-    if (str === "number") {
->str === "number" : boolean
->str : "string" | "number"
->"number" : "number"
-
-        return 3;
->3 : 3
-    }
-
-    return "";
->"" : ""
-}
-
-const zz = depLikeFun2(undefined as any as "number" | "string");
->zz : typeof str extends "number" ? number : string
->depLikeFun2(undefined as any as "number" | "string") : typeof str extends "number" ? number : string
->depLikeFun2 : (str: "string" | "number") => typeof str extends "number" ? number : string
->undefined as any as "number" | "string" : "string" | "number"
+const r3 = foo(undefined as any as (1 | 2));
+>r3 : string | number
+>foo(undefined as any as (1 | 2)) : string | number
+>foo : (x: 1 | 2) => A[narrow x]
+>undefined as any as (1 | 2) : 1 | 2
 >undefined as any : any
 >undefined : undefined
 
-const zzz = depLikeFun2("number");
->zzz : typeof str extends "number" ? number : string
->depLikeFun2("number") : typeof str extends "number" ? number : string
->depLikeFun2 : (str: "string" | "number") => typeof str extends "number" ? number : string
->"number" : "number"
-
-function depLikeFun3<T extends keyof F>(str: T): F[typeof str] {
->depLikeFun3 : <T extends keyof F>(str: T) => F[typeof str]
->str : T
->str : T
-
-    if (str === "t") {
->str === "t" : boolean
->str : T
->"t" : "t"
-
-        const y: "t" = str;
->y : "t"
->str : "t"
-
-        return false;
->false : false
-
-    } else {
-        return true;
->true : true
-    }
-    return 0;
->0 : 0
-}

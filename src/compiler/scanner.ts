@@ -162,6 +162,7 @@ export const textToKeywordObj: MapLike<KeywordSyntaxKind> = {
     keyof: SyntaxKind.KeyOfKeyword,
     let: SyntaxKind.LetKeyword,
     module: SyntaxKind.ModuleKeyword,
+    narrow: SyntaxKind.NarrowKeyord,
     namespace: SyntaxKind.NamespaceKeyword,
     never: SyntaxKind.NeverKeyword,
     new: SyntaxKind.NewKeyword,

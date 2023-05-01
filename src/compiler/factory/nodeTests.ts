@@ -150,6 +150,7 @@ import {
     NamespaceExport,
     NamespaceExportDeclaration,
     NamespaceImport,
+    NarrowTypeNode,
     NewExpression,
     Node,
     NonNullExpression,
@@ -478,6 +479,10 @@ export function isConstructorTypeNode(node: Node): node is ConstructorTypeNode {
 
 export function isTypeQueryNode(node: Node): node is TypeQueryNode {
     return node.kind === SyntaxKind.TypeQuery;
+}
+
+export function isNarrowTypeNode(node: Node): node is NarrowTypeNode {
+    return node.kind === SyntaxKind.NarrowType;
 }
 
 export function isTypeLiteralNode(node: Node): node is TypeLiteralNode {
