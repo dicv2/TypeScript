@@ -216,6 +216,7 @@ import {
     NamespaceBody,
     NamespaceExport,
     NamespaceImport,
+    NarrowTypeNode,
     NewExpression,
     Node,
     NodeArray,
@@ -913,6 +914,11 @@ export function getNonAssignedNameOfDeclaration(declaration: Declaration | Expre
             if (isBindableStaticElementAccessExpression(expr)) {
                 return expr.argumentExpression;
             }
+        // case SyntaxKind.NarrowType:
+        //     const { parent } = declaration as unknown as NarrowTypeNode;
+        //     const exprName = getNonAssignedNameOfDeclaration((parent as Declaration));
+        //     return exprName ?
+
     }
     return (declaration as NamedDeclaration).name;
 }

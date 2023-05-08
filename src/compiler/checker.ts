@@ -11654,16 +11654,17 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
 
     function getTypeQueryParameters(node: Node): QueryTypeParameter[] | undefined {
         let queryTypeParameters: QueryTypeParameter[] | undefined;
-        visitNode(node, visitor);
+        visitor(node);
 
-        function visitor(node: Node): Node | readonly Node[] | undefined {
+        function visitor(node: Node): void {
             // if (isTypeQueryNode(node)) {
             //     (queryTypeParameters || (queryTypeParameters = [])).push(getTypeParameterFromTypeQueryNode(node));
             // }
             if (isNarrowTypeNode(node)) {
                 (queryTypeParameters || (queryTypeParameters = [])).push(getTypeParameterFromNarrowTypeNode(node));
             }
-            return visitEachChild(node, visitor, nullTransformationContext);
+
+            forEachChild(node, visitor);
         }
         return queryTypeParameters;
     }
@@ -13729,8 +13730,6 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
     }
 
     function getBaseConstraintOfType(type: Type): Type | undefined {
-        // type = getOkType(type);
-        getOkType(type);
         if (type.flags & (TypeFlags.InstantiableNonPrimitive | TypeFlags.UnionOrIntersection | TypeFlags.TemplateLiteral | TypeFlags.StringMapping)) {
             const constraint = getResolvedBaseConstraint(type as InstantiableType | UnionOrIntersectionType);
             return constraint !== noConstraintType && constraint !== circularConstraintType ? constraint : undefined;
@@ -15046,7 +15045,7 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
     function getInferredTypeParameterConstraint(typeParameter: TypeParameter, omitTypeReferences?: boolean) {
         let inferences: Type[] | undefined;
         if (isQueryTypeParameter(typeParameter)) {
-            // >> TODO: get constraint
+            // >> TODO: get constraint. Reinvestigate bug in editor context.
             return;
         }
         if (typeParameter.symbol?.declarations) {
@@ -15677,56 +15676,18 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
             links.resolvedType = resolvedType;
         }
         return links.resolvedType;
-        // const links = getNodeLinks(node);
-        // if (!links.resolvedType) {
-        //     // TypeScript 1.0 spec (April 2014): 3.6.3
-        //     // The expression is processed as an identifier expression (section 4.3)
-        //     // or property access expression(section 4.10),
-        //     // the widened type(section 3.9) of which becomes the result.
-        //     // const type = checkExpressionWithTypeArguments(node);
-        //     // const resolvedType = getRegularTypeOfLiteralType(getWidenedType(type));
-        //     // // const delayedType = createType(TypeFlags.Any) as SomeRandomType; // >> TODO: would need a new typeflag + new type of type?
-        //     // // delayedType.randomBase = resolvedType;
-        //     // // delayedType.exprName = node.exprName;
-        //     // const tp = createTypeParameter() as QueryTypeParameter;
-        //     // tp.constraint = resolvedType;
-        //     // tp.exprName = node.exprName;
-        //     // links.resolvedType = tp;
-        //     links.resolvedType = getTypeParameterFromTypeQueryNode(node); // >> TODO: this is just to make the type checker happy
-        // }
-        // if (!(links.resolvedType as QueryTypeParameter).constraint) {
-        //     const type = checkExpressionWithTypeArguments(node);
-        //     const resolvedType = getRegularTypeOfLiteralType(getWidenedType(type));
-        //     (links.resolvedType as QueryTypeParameter).constraint = resolvedType;
-        //     // if (resolvedType.flags & TypeFlags.Any) {
-        //     //     // >> Propagate `any`ness?
-        //     //     links.resolvedType.flags |= TypeFlags.Any;
-        //     // }
-        // }
-        // // return links.resolvedType!;
-        // return links.resolvedType;
     }
-
-    // function getTypeParameterFromTypeQueryNode(node: TypeQueryNode): QueryTypeParameter {
-    //     const links = getNodeLinks(node);
-    //     if (!links.resolvedType) {
-    //         const tp = createTypeParameter() as QueryTypeParameter;
-    //         tp.exprName = node.exprName;
-    //         links.resolvedType = tp;
-    //     }
-    //     return links.resolvedType as QueryTypeParameter;
-    // }
 
     function getTypeFromNarrowTypeNode(node: NarrowTypeNode): Type {
         const links = getNodeLinks(node);
         if (!links.resolvedType) {
             links.resolvedType = getTypeParameterFromNarrowTypeNode(node); // Needed for compiler
         }
-        if (!(links.resolvedType as QueryTypeParameter).constraint) {
-            const type = checkIdentifier(node.idName, /*checkMode*/ undefined);
-            const resolvedType = getRegularTypeOfLiteralType(getWidenedType(type));
-            (links.resolvedType as QueryTypeParameter).constraint = resolvedType;
-        }
+        // if (!(links.resolvedType as QueryTypeParameter).constraint) {
+        //     const type = checkIdentifier(node.idName, /*checkMode*/ undefined);
+        //     const resolvedType = getRegularTypeOfLiteralType(getWidenedType(type));
+        //     (links.resolvedType as QueryTypeParameter).constraint = resolvedType;
+        // }
 
         return links.resolvedType;
     }
@@ -17926,7 +17887,8 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
             // Instantiate the extends type including inferences for 'infer T' type parameters
             const inferredExtendsType = combinedMapper ? instantiateType(root.extendsType, combinedMapper) : extendsType;
             // We attempt to resolve the conditional type only when the check and extends types are non-generic
-            if (!checkTypeDeferred && !isDeferredType(inferredExtendsType, checkTuples)) {
+            // if (!checkTypeDeferred && !isDeferredType(inferredExtendsType, checkTuples)) {
+            if (true) {
                 // Return falseType for a definitely false extends check. We check an instantiations of the two
                 // types with type parameters mapped to the wildcard type, the most permissive instantiations
                 // possible (the wildcard type is assignable to and from all types). If those are not related,
@@ -17958,6 +17920,16 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
                 //   type Foo<T extends { x: any }> = T extends { x: string } ? string : number
                 // doesn't immediately resolve to 'string' instead of being deferred.
                 if (inferredExtendsType.flags & TypeFlags.AnyOrUnknown || isTypeAssignableTo(getRestrictiveInstantiation(checkType), getRestrictiveInstantiation(inferredExtendsType))) {
+                    const trueType = getTypeFromTypeNode(root.node.trueType);
+                    const trueMapper = combinedMapper || mapper;
+                    if (canTailRecurse(trueType, trueMapper)) {
+                        continue;
+                    }
+                    result = instantiateType(trueType, trueMapper);
+                    break;
+                }
+                // >> TODO: resolve here
+                if (isTypeAssignableTo(checkType, inferredExtendsType)) {
                     const trueType = getTypeFromTypeNode(root.node.trueType);
                     const trueMapper = combinedMapper || mapper;
                     if (canTailRecurse(trueType, trueMapper)) {
@@ -19080,70 +19052,70 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
         return type;
     }
 
-    function collectQueryTypeParametersFromType(type: Type): readonly QueryTypeParameter[] | undefined {
-        // type = getReducedType(type); >> TODO: do we need this?
-        // type = getNormalizedType(type, /*writing*/ false);
-        const flags = type.flags;
-        // T
-        if (flags & TypeFlags.TypeParameter) {
-            if (isQueryTypeParameter(type)) {
-                return [type];
-            }
-            // >> We're skipping collecting the query type parameters from constraints here.
-            return undefined;
-        }
-        // T | S
-        // T & S
-        if (flags & TypeFlags.UnionOrIntersection) {
-            return flatMap((type as UnionOrIntersectionType).types, collectQueryTypeParametersFromType);
-        }
-        // keyof T
-        if (flags & TypeFlags.Index) {
-            return collectQueryTypeParametersFromType((type as IndexType).type);
-        }
-        // T[S]
-        if (flags & TypeFlags.IndexedAccess) {
-            return concatenate(
-                collectQueryTypeParametersFromType((type as IndexedAccessType).objectType),
-                collectQueryTypeParametersFromType((type as IndexedAccessType).indexType));
-        }
-        // T extends S ? U : V
-        if (flags & TypeFlags.Conditional) {
-            return concatenate(
-                collectQueryTypeParametersFromType((type as ConditionalType).checkType),
-                concatenate(
-                    collectQueryTypeParametersFromType((type as ConditionalType).extendsType),
-                    concatenate(
-                        collectQueryTypeParametersFromType(getTrueTypeFromConditionalType((type as ConditionalType))),
-                        collectQueryTypeParametersFromType(getFalseTypeFromConditionalType((type as ConditionalType)))
-                    )
-                )
-            );
-        }
-        // { ... }
-        if (flags & TypeFlags.Object) {
-            // >> What do I do here??
-            // const resolvedType = resolveStructuredTypeMembers((type as ObjectType));
-            // >> TODO: do this
-            // >> We could do it like `getObjectTypeInstantiation` does,
-            // >> where it gets type parameters from the object type's declaration, but
-            // >> not sure if this would be enough.
-        }
-        return undefined;
-    }
+    // function collectQueryTypeParametersFromType(type: Type): readonly QueryTypeParameter[] | undefined {
+    //     // type = getReducedType(type); >> TODO: do we need this?
+    //     // type = getNormalizedType(type, /*writing*/ false);
+    //     const flags = type.flags;
+    //     // T
+    //     if (flags & TypeFlags.TypeParameter) {
+    //         if (isQueryTypeParameter(type)) {
+    //             return [type];
+    //         }
+    //         // >> We're skipping collecting the query type parameters from constraints here.
+    //         return undefined;
+    //     }
+    //     // T | S
+    //     // T & S
+    //     if (flags & TypeFlags.UnionOrIntersection) {
+    //         return flatMap((type as UnionOrIntersectionType).types, collectQueryTypeParametersFromType);
+    //     }
+    //     // keyof T
+    //     if (flags & TypeFlags.Index) {
+    //         return collectQueryTypeParametersFromType((type as IndexType).type);
+    //     }
+    //     // T[S]
+    //     if (flags & TypeFlags.IndexedAccess) {
+    //         return concatenate(
+    //             collectQueryTypeParametersFromType((type as IndexedAccessType).objectType),
+    //             collectQueryTypeParametersFromType((type as IndexedAccessType).indexType));
+    //     }
+    //     // T extends S ? U : V
+    //     if (flags & TypeFlags.Conditional) {
+    //         return concatenate(
+    //             collectQueryTypeParametersFromType((type as ConditionalType).checkType),
+    //             concatenate(
+    //                 collectQueryTypeParametersFromType((type as ConditionalType).extendsType),
+    //                 concatenate(
+    //                     collectQueryTypeParametersFromType(getTrueTypeFromConditionalType((type as ConditionalType))),
+    //                     collectQueryTypeParametersFromType(getFalseTypeFromConditionalType((type as ConditionalType)))
+    //                 )
+    //             )
+    //         );
+    //     }
+    //     // { ... }
+    //     if (flags & TypeFlags.Object) {
+    //         // >> What do I do here??
+    //         // const resolvedType = resolveStructuredTypeMembers((type as ObjectType));
+    //         // >> TODO: do this
+    //         // >> We could do it like `getObjectTypeInstantiation` does,
+    //         // >> where it gets type parameters from the object type's declaration, but
+    //         // >> not sure if this would be enough.
+    //     }
+    //     return undefined;
+    // }
 
-    function getOkType(type: Type): Type {
-        return instantiateQueryTypesWithConstraint(type);
-    }
+    // function getOkType(type: Type): Type {
+    //     return instantiateQueryTypesWithConstraint(type);
+    // }
 
-    function instantiateQueryTypesWithConstraint(type: Type): Type {
-        const queryTypeParameters = collectQueryTypeParametersFromType(type);
-        if (!queryTypeParameters) {
-            return type;
-        }
-        const mapper = createTypeMapper(queryTypeParameters, queryTypeParameters.map(tp => tp.constraint!));
-        return instantiateType(type, mapper);
-    }
+    // function instantiateQueryTypesWithConstraint(type: Type): Type {
+    //     const queryTypeParameters = collectQueryTypeParametersFromType(type);
+    //     if (!queryTypeParameters) {
+    //         return type;
+    //     }
+    //     const mapper = createTypeMapper(queryTypeParameters, queryTypeParameters.map(tp => tp.constraint!));
+    //     return instantiateType(type, mapper);
+    // }
 
     function instantiateType(type: Type, mapper: TypeMapper | undefined): Type;
     function instantiateType(type: Type | undefined, mapper: TypeMapper | undefined): Type | undefined;
@@ -38828,6 +38800,7 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
         getTypeFromTypeQueryNode(node);
     }
 
+    // >> TODO: copy stuff from `checkTypeParameter`
     function checkNarrowType(node: NarrowTypeNode) {
         getTypeFromNarrowTypeNode(node);
     }
@@ -42439,14 +42412,12 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
                     // so we don't need to report one here.
                     // const queryTypeParameters = collectQueryTypeParameters(unwrappedReturnType);
                     const queryTypeParameters = collectQueryTypeParameters(container.type);
-                    // >> TODO: is `checkExpression` gonna return the narrowed thing? Not immediately, need to fake narrowable node.
                     const mapper = createTypeMapper(queryTypeParameters, queryTypeParameters.map(tp => {
                         const originalName = tp.exprName;
-                        const fakeName = factory.cloneNode(originalName);
+                        const fakeName = factory.cloneNode(originalName); // Fake a narrowable node.
                         setParent(fakeName, node.parent);
                         setNodeFlags(fakeName, fakeName.flags | NodeFlags.Synthesized);
                         fakeName.flowNode = node.flowNode;
-                        // return checkExpression(fakeName);
                         const exprType = checkExpression(fakeName);
                         const newTypeParam = createTypeParameter() as QueryTypeParameter;
                         newTypeParam.exprName = tp.exprName;
@@ -42474,40 +42445,6 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
         function collectQueryTypeParameters(node: Node | undefined): QueryTypeParameter[] {
             if (!node) return [];
             return (getOuterTypeParameters(node) || []).filter(isQueryTypeParameter);
-            // // >> TODO: need to reduce the type first?
-            // const flags = type.flags;
-            // if (flags & TypeFlags.TypeParameter) {
-            //     if (isQueryTypeParameter(type)) {
-            //         return [type];
-            //     }
-            //     // >> TODO: deal with non-query type parameter
-            //     return [];
-            // }
-            // if (flags & TypeFlags.Object) {
-            //     // const t = type as ObjectType;
-            //     // >> TODO: deal with object types
-            //     return [];
-            // }
-            // if (flags & TypeFlags.UnionOrIntersection) {
-            //     return (type as UnionOrIntersectionType).types.flatMap(collectQueryTypeParameters);
-            // }
-
-            // // >> TODO: Copy from `instantiateTypeWorker`?
-            // if (flags & TypeFlags.IndexedAccess) {
-            //     return [...collectQueryTypeParameters((type as IndexedAccessType).objectType), ...collectQueryTypeParameters((type as IndexedAccessType).indexType)];
-            //     // const newAliasSymbol = aliasSymbol || type.aliasSymbol;
-            //     // const newAliasTypeArguments = aliasSymbol ? aliasTypeArguments : instantiateTypes(type.aliasTypeArguments, mapper);
-            //     // return getIndexedAccessType(instantiateType((type as IndexedAccessType).objectType, mapper), instantiateType((type as IndexedAccessType).indexType, mapper), (type as IndexedAccessType).accessFlags, /*accessNode*/ undefined, newAliasSymbol, newAliasTypeArguments);
-            // }
-            // if (flags & TypeFlags.Conditional) {
-            //     return [
-            //         ...collectQueryTypeParameters((type as ConditionalType).checkType),
-            //         ...collectQueryTypeParameters((type as ConditionalType).extendsType),
-            //         ...collectQueryTypeParameters(getTrueTypeFromConditionalType(type as ConditionalType)),
-            //         ...collectQueryTypeParameters(getFalseTypeFromConditionalType(type as ConditionalType)),
-            //     ];
-            // }
-            // return [];
         }
     }
 
